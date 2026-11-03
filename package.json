@@ -4,6 +4,10 @@
   "private": true,
   "description": "Local social media manager: channels, weekly video planning, YouTube/Instagram publishing, analytics and growth insights.",
   "main": "server.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "start": "node --env-file=.env server.js"
   },

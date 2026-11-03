@@ -1,8 +1,9 @@
-// Social Manager — a local app for running several YouTube/Instagram channels.
+// Social Manager — multi-brand YouTube/Instagram desk.
 //   npm start  →  http://localhost:4173
-// The site binds to 127.0.0.1. Channel data is stored in Supabase; video files stay on disk.
+// Data and media live in Supabase. Locally it binds to 127.0.0.1; on Vercel it exports the app.
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const express = require('express');
 const multer = require('multer');
 const { all, get, run, parse, setting, setSetting, log } = require('./lib/db');
@@ -18,8 +19,21 @@ const manager = require('./lib/manager');
 const storage = require('./lib/storage');
 
 const PORT = Number(process.env.PORT || 4173);
-const BASE = `http://localhost:${PORT}`;
+const ON_VERCEL = !!process.env.VERCEL;
+const publicBase = () => {
+  if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL.replace(/\/$/, '');
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return `http://localhost:${PORT}`;
+};
+let BASE = publicBase();
 const app = express();
+app.use((req, res, next) => {
+  const host = req.get('x-forwarded-host') || req.get('host');
+  const proto = (req.get('x-forwarded-proto') || req.protocol || 'http').split(',')[0].trim();
+  if (host && !process.env.APP_BASE_URL) BASE = `${proto}://${host}`;
+  next();
+});
 app.use(express.json({ limit: '5mb' }));
 app.use(express.text({ type: 'text/csv', limit: '20mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -102,7 +116,7 @@ app.put('/api/videos/:id', wrap(req => {
   return { ok: true };
 }));
 
-const uploadDir = path.join(__dirname, 'data', 'uploads');
+const uploadDir = ON_VERCEL ? path.join(os.tmpdir(), 'social-manager-uploads') : path.join(__dirname, 'data', 'uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
 const upload = multer({
   storage: multer.diskStorage({
@@ -123,6 +137,16 @@ const receiveFiles = (req, res) => new Promise((resolve, reject) => upload.field
   else resolve();
 }));
 const savedFile = (req, field) => (req.files && req.files[field] && req.files[field][0] ? req.files[field][0].path : '');
+const cleanupLocal = (...files) => files.filter(Boolean).forEach(f => { if (!storage.isStored(f)) fs.unlink(f, () => {}); });
+
+async function storeImage(req, field) {
+  const file = req.files && req.files[field] && req.files[field][0];
+  if (!file) return '';
+  const name = storage.objectName(file.originalname, 'i');
+  const stored = await storage.uploadImage(file.path, name, storage.contentType(file.originalname, file.mimetype));
+  fs.unlink(file.path, () => {});
+  return stored;
+}
 
 app.post('/api/videos', wrap(async (req, res) => {
   await receiveFiles(req, res);
@@ -131,22 +155,24 @@ app.post('/api/videos', wrap(async (req, res) => {
   if (!b.channel_id) throw new Error('Choose a channel.');
   if (!b.title || !b.title.trim()) throw new Error('Give the video a title.');
   if (!video) throw new Error('Choose the video file.');
-  const cover = savedFile(req, 'cover'), portrait = savedFile(req, 'portrait'), thumb = savedFile(req, 'thumb');
-  if (!cover) throw new Error('Add the vertical cover (9:16).');
-  if (!portrait) throw new Error('Add the portrait cover (4:5).');
+  if (!savedFile(req, 'cover')) throw new Error('Add the vertical cover (9:16).');
+  if (!savedFile(req, 'portrait')) throw new Error('Add the portrait cover (4:5).');
   const tags = JSON.stringify(String(b.tags || '').split(',').map(s => s.trim().replace(/^#/, '').toLowerCase()).filter(Boolean));
   const name = storage.objectName(req.files.video[0].originalname);
   const stored = await storage.upload(video, name, storage.contentType(req.files.video[0].originalname, req.files.video[0].mimetype));
-  let id;
+  let cover = '', portrait = '', thumb = '', id;
   try {
+    cover = await storeImage(req, 'cover');
+    portrait = await storeImage(req, 'portrait');
+    thumb = await storeImage(req, 'thumb');
     id = Number(run(`INSERT INTO videos(channel_id, title, file_path, cover_path, portrait_path, thumb_path, caption, description, tags, duration, status)
       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     b.channel_id, b.title.trim(), stored, cover, portrait, thumb, b.caption || '', b.description || '', tags, library.probeDuration(video), b.status || 'ready').lastInsertRowid);
   } catch (err) {
-    await storage.remove(stored).catch(() => {});
+    await Promise.all([stored, cover, portrait, thumb].map(p => storage.remove(p).catch(() => {})));
     throw err;
   } finally {
-    fs.unlink(video, () => {});
+    cleanupLocal(video);
   }
   log(b.channel_id, `Added video: ${b.title.trim()}`);
   return { id };
@@ -156,9 +182,9 @@ app.post('/api/videos/:id/images', wrap(async (req, res) => {
   await receiveFiles(req, res);
   const v = get('SELECT * FROM videos WHERE id = ?', req.params.id);
   if (!v) throw new Error('Video not found.');
-  const cover = savedFile(req, 'cover') || v.cover_path;
-  const portrait = savedFile(req, 'portrait') || v.portrait_path;
-  const thumb = savedFile(req, 'thumb') || v.thumb_path;
+  const cover = savedFile(req, 'cover') ? await storeImage(req, 'cover') : v.cover_path;
+  const portrait = savedFile(req, 'portrait') ? await storeImage(req, 'portrait') : v.portrait_path;
+  const thumb = savedFile(req, 'thumb') ? await storeImage(req, 'thumb') : v.thumb_path;
   run('UPDATE videos SET cover_path = ?, portrait_path = ?, thumb_path = ? WHERE id = ?', cover, portrait, thumb, v.id);
   return { ok: true };
 }));
@@ -231,9 +257,14 @@ app.put('/api/settings', wrap(req => {
   return { ok: true };
 }));
 
-const server = app.listen(PORT, '127.0.0.1', () => {
-  console.log(`Social Manager running at ${BASE}`);
-  publish.start(BASE);
-});
-server.requestTimeout = 0;
-server.headersTimeout = 0;
+module.exports = app;
+
+if (!ON_VERCEL) {
+  const server = app.listen(PORT, '127.0.0.1', () => {
+    BASE = publicBase();
+    console.log(`Social Manager running at ${BASE}`);
+    publish.start(BASE);
+  });
+  server.requestTimeout = 0;
+  server.headersTimeout = 0;
+}
