@@ -9,3 +9,6 @@ data/uploads/
 *.log
 .cursor/
 .vercel/
+
+# Local Netlify folder
+.netlify

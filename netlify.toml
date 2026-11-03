@@ -1,5 +1,6 @@
 [build]
-  command = "npm install"
+  # Drop ffmpeg binaries from the Functions bundle (too large for Netlify's 250MB limit).
+  command = "npm install && npm uninstall ffmpeg-static --no-save"
   publish = "public"
   functions = "netlify/functions"
 
@@ -8,17 +9,9 @@
 
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = [
-    "express",
-    "serverless-http",
-    "@supabase/supabase-js",
-    "@anthropic-ai/sdk",
-    "googleapis",
-    "multer",
-    "tus-js-client",
-    "ffmpeg-static"
-  ]
-  included_files = ["lib/**", "server.js", "public/**"]
+  # Keep the bundle small — do not ship ffmpeg binaries or the full googleapis tree as externals.
+  external_node_modules = ["express", "serverless-http", "multer"]
+  included_files = ["lib/**", "server.js"]
 
 [functions."server"]
   timeout = 26
