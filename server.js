@@ -1,6 +1,6 @@
 // Social Manager — multi-brand YouTube/Instagram desk.
 //   npm start  →  http://localhost:4173
-// Data and media live in Supabase. Locally it binds to 127.0.0.1; on Vercel it exports the app.
+// Data and media live in Supabase. Locally it binds to 127.0.0.1; on Netlify/Vercel it exports the app.
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -19,9 +19,11 @@ const manager = require('./lib/manager');
 const storage = require('./lib/storage');
 
 const PORT = Number(process.env.PORT || 4173);
-const ON_VERCEL = !!process.env.VERCEL;
+const ON_SERVERLESS = !!(process.env.NETLIFY || process.env.VERCEL);
 const publicBase = () => {
   if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL.replace(/\/$/, '');
+  if (process.env.URL) return process.env.URL.replace(/\/$/, ''); // Netlify site URL
+  if (process.env.DEPLOY_PRIME_URL) return process.env.DEPLOY_PRIME_URL.replace(/\/$/, '');
   if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
   return `http://localhost:${PORT}`;
@@ -36,7 +38,7 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: '5mb' }));
 app.use(express.text({ type: 'text/csv', limit: '20mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+if (!ON_SERVERLESS) app.use(express.static(path.join(__dirname, 'public')));
 
 const wrap = fn => async (req, res) => {
   try { res.json(await fn(req, res)); }
@@ -116,7 +118,7 @@ app.put('/api/videos/:id', wrap(req => {
   return { ok: true };
 }));
 
-const uploadDir = ON_VERCEL ? path.join(os.tmpdir(), 'social-manager-uploads') : path.join(__dirname, 'data', 'uploads');
+const uploadDir = ON_SERVERLESS ? path.join(os.tmpdir(), 'social-manager-uploads') : path.join(__dirname, 'data', 'uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
 const upload = multer({
   storage: multer.diskStorage({
@@ -259,7 +261,7 @@ app.put('/api/settings', wrap(req => {
 
 module.exports = app;
 
-if (!ON_VERCEL) {
+if (!ON_SERVERLESS) {
   const server = app.listen(PORT, '127.0.0.1', () => {
     BASE = publicBase();
     console.log(`Social Manager running at ${BASE}`);
