@@ -19,7 +19,7 @@ const manager = require('./lib/manager');
 const storage = require('./lib/storage');
 
 const PORT = Number(process.env.PORT || 4173);
-const ON_SERVERLESS = !!(process.env.NETLIFY || process.env.VERCEL);
+const ON_SERVERLESS = !!(process.env.NETLIFY || process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 const publicBase = () => {
   if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL.replace(/\/$/, '');
   if (process.env.URL) return process.env.URL.replace(/\/$/, ''); // Netlify site URL
