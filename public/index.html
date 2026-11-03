@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Social Manager</title>
+<script>
+  // apply the saved theme before first paint, so there's no flash
+  try { const t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="shell">
+  <header class="mobile-bar">
+    <button class="menu-btn" id="menu-btn" type="button" aria-label="Open menu" aria-controls="side" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="brand"><span class="logo">◆</span> Social Manager</div>
+  </header>
+  <div class="nav-backdrop" id="nav-backdrop" hidden></div>
+  <nav class="side" id="side">
+    <div class="brand side-brand"><span class="logo">◆</span> Social Manager</div>
+    <a href="#/" data-page="dashboard">Dashboard</a>
+    <a href="#/planner" data-page="planner">Weekly planner</a>
+    <a href="#/library" data-page="library">Video library</a>
+    <a href="#/analytics" data-page="analytics">Analytics</a>
+    <a href="#/insights" data-page="insights">Insights &amp; manager</a>
+    <a href="#/channels" data-page="channels">Channels &amp; accounts</a>
+    <a href="#/settings" data-page="settings">Settings</a>
+    <div class="theme-switch" role="group" aria-label="Theme">
+      <button data-theme-pick="system">System</button><button data-theme-pick="light">Light</button><button data-theme-pick="dark">Dark</button>
+    </div>
+    <div class="side-foot">Runs on this computer. Data is in Supabase.</div>
+  </nav>
+  <main>
+    <header class="top">
+      <h1 id="page-title">Dashboard</h1>
+      <label class="channel-pick">Channel
+        <select id="channel-filter"></select>
+      </label>
+    </header>
+    <div id="view"></div>
+  </main>
+</div>
+<div id="modal" class="modal" hidden><div class="modal-card" role="dialog" aria-modal="true"></div></div>
+<div id="toast" class="toast" hidden></div>
+<script src="charts.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

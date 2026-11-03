@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+node_modules/
+data/social.db
+data/social.db-*
+data/uploads/
+.DS_Store
+*.log
+.cursor/
