@@ -10,7 +10,7 @@
 [functions]
   node_bundler = "esbuild"
   # Keep the bundle small — do not ship ffmpeg binaries or the full googleapis tree as externals.
-  external_node_modules = ["express", "serverless-http", "multer"]
+  external_node_modules = ["express", "serverless-http", "multer", "@supabase/supabase-js"]
   included_files = ["lib/**", "server.js"]
 
 [functions."server"]
